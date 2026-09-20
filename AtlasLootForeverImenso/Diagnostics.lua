@@ -1,4 +1,4 @@
--- AtlasLootForever :: Diagnostics.lua
+-- AtlasLootForeverImenso :: Diagnostics.lua
 -- Captures ADDON_ACTION_FORBIDDEN / ADDON_ACTION_BLOCKED and reports EXACTLY
 -- which function was blocked and when, since the game popup never says.
 

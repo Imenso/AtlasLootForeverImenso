@@ -1,4 +1,4 @@
--- AtlasLootForever :: Collector.lua
+-- AtlasLootForeverImenso :: Collector.lua
 -- Records real drops: which item came from which NPC, in which instance, and
 -- how many times that corpse was looted (the denominator for the drop chance).
 --
@@ -71,6 +71,7 @@ local function RecordItem(npcID, npcName, itemID, quality, guess)
 		end
 
 		if ns.InvalidateSourceIndex then ns.InvalidateSourceIndex() end
+		if ns.InvalidateLooted then ns.InvalidateLooted() end
 	end
 
 	item.n = item.n + 1

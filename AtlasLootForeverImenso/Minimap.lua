@@ -1,4 +1,4 @@
--- AtlasLootForever :: Minimap.lua
+-- AtlasLootForeverImenso :: Minimap.lua
 -- Minimap button: left click opens the browser, right click exports,
 -- dragging moves it around the edge. The position is saved.
 
@@ -34,6 +34,30 @@ local function UpdatePosition()
 end
 
 ns.UpdateMinimapPosition = UpdatePosition
+
+-- A door for ImensoTweaks.
+--
+-- This client hands addons an empty saved-variables table on /reload, so the
+-- angle you drag the button to is gone by the next session. ImensoTweaks keeps
+-- a copy and puts it back - but it loads AFTER this addon (A sorts before I),
+-- so it cannot do that the way it does for the others, before they read their
+-- own settings. These two functions are how it reaches in afterwards instead:
+-- it reads the angle at logout and sets it again at login.
+function AtlasLootForeverImenso_GetMinimapAngle()
+	local db = ns.db
+	if db and db.settings and type(db.settings.minimapAngle) == "number" then
+		return db.settings.minimapAngle
+	end
+	return nil
+end
+
+function AtlasLootForeverImenso_SetMinimapAngle(angle)
+	if type(angle) ~= "number" then return false end
+	if not ns.db or not ns.db.settings then return false end
+	ns.db.settings.minimapAngle = angle
+	UpdatePosition()
+	return true
+end
 
 local function OnDragUpdate()
 	local cx, cy = Minimap:GetCenter()
@@ -72,7 +96,7 @@ function ns.CreateMinimapButton()
 	if button then return button end
 	if not Minimap then return nil end
 
-	button = CreateFrame("Button", "AtlasLootForeverMinimapButton", Minimap)
+	button = CreateFrame("Button", "AtlasLootForeverImensoMinimapButton", Minimap)
 	button:SetSize(31, 31)
 	button:SetFrameStrata("MEDIUM")
 	button:SetFrameLevel(8)

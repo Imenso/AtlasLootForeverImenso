@@ -1,4 +1,4 @@
--- AtlasLootForever :: UI.lua
+-- AtlasLootForeverImenso :: UI.lua
 -- Browser: dungeon -> boss -> loot, with global search and drop estimates.
 
 local ADDON, ns = ...
@@ -7,6 +7,8 @@ local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local ui
 local state = { instance = nil, boss = nil, search = "" }
+
+local OnItemClick -- definido mais abaixo; usado pelos botoes de item
 
 -------------------------------------------------------------------------------
 -- List helpers
@@ -93,6 +95,94 @@ local function GetRow(column, index, height)
 	row.highlight:Hide()
 	row:Show()
 	return row
+end
+
+local ITEM_HEIGHT = 34
+
+local function ItemTooltip(self)
+	self.highlight:Show()
+	if not self.itemID then return end
+	ns.MarkAction("item tooltip")
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	local ok = pcall(GameTooltip.SetHyperlink, GameTooltip, ns.ItemLink(self.itemID))
+	if not ok then GameTooltip:SetText("Item " .. tostring(self.itemID)) end
+
+	if ns.ItemStatus then
+		local status, clientName = ns.ItemStatus(self.itemID)
+		local info = ns.STATUS_TAG and ns.STATUS_TAG[status]
+		if info then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine("|c" .. info.color .. info.text .. "|r")
+			if status == "renamed" and clientName then
+				GameTooltip:AddLine("your client calls it: " .. clientName, 1, 1, 1)
+			end
+		end
+	end
+	GameTooltip:AddLine("shift-click links it in chat, ctrl-click tries it on", 0.5, 0.5, 0.5)
+	GameTooltip:Show()
+end
+
+-- Two-column item grid, the way AtlasLoot lays its pages out.
+local function GetItemButton(column, index)
+	column.items = column.items or {}
+	local btn = column.items[index]
+
+	if not btn then
+		btn = CreateFrame("Button", nil, column.content)
+		btn:RegisterForClicks("LeftButtonUp")
+
+		btn.highlight = btn:CreateTexture(nil, "BACKGROUND")
+		btn.highlight:SetAllPoints()
+		btn.highlight:SetColorTexture(1, 1, 1, 0.07)
+		btn.highlight:Hide()
+
+		btn.icon = btn:CreateTexture(nil, "ARTWORK")
+		btn.icon:SetSize(26, 26)
+		btn.icon:SetPoint("LEFT", btn, "LEFT", 2, 0)
+
+		btn.stat = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		btn.stat:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -2, -3)
+		btn.stat:SetJustifyH("RIGHT")
+
+		btn.name = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		btn.name:SetPoint("TOPLEFT", btn.icon, "TOPRIGHT", 5, -2)
+		btn.name:SetPoint("RIGHT", btn.stat, "LEFT", -4, 0)
+		btn.name:SetJustifyH("LEFT")
+		btn.name:SetWordWrap(false)
+
+		btn.sub = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		btn.sub:SetPoint("TOPLEFT", btn.name, "BOTTOMLEFT", 0, -2)
+		btn.sub:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
+		btn.sub:SetJustifyH("LEFT")
+		btn.sub:SetWordWrap(false)
+
+		btn:SetScript("OnEnter", ItemTooltip)
+		btn:SetScript("OnLeave", function(self)
+			self.highlight:Hide()
+			GameTooltip:Hide()
+		end)
+		btn:SetScript("OnClick", function(self, ...) return OnItemClick(self, ...) end)
+
+		column.items[index] = btn
+	end
+
+	local half = (column.content:GetWidth() or 240) / 2
+	local col = (index - 1) % 2
+	local line = math.floor((index - 1) / 2)
+
+	btn:SetSize(half - 4, ITEM_HEIGHT)
+	btn:ClearAllPoints()
+	btn:SetPoint("TOPLEFT", column.content, "TOPLEFT", col * half, -line * ITEM_HEIGHT)
+	btn.highlight:Hide()
+	btn:Show()
+	return btn
+end
+
+local function HideItemsFrom(column, index)
+	if not column.items then return end
+	for i = index, #column.items do
+		column.items[i]:Hide()
+	end
 end
 
 local function HideRowsFrom(column, index)
@@ -219,6 +309,7 @@ local function BuildItemList(entry)
 		row.name = (data and data.name) or row.refName or ("Item " .. row.itemID)
 		row.texture = (data and data.texture) or FALLBACK_ICON
 		row.quality = row.quality or (data and data.quality)
+		row.sub = ns.ItemSlotText(data)
 	end
 
 	table.sort(list, function(a, b)
@@ -291,13 +382,32 @@ end
 -- Render
 -------------------------------------------------------------------------------
 
-local function OnItemClick(self)
-	local link = ns.ItemLink(self.tooltipItem)
+function OnItemClick(self)
+	local itemID = self.itemID or self.tooltipItem
+	if not itemID then return end
+
 	if IsShiftKeyDown() then
 		ns.MarkAction("shift-click (chat link)")
-		if ChatEdit_InsertLink then pcall(ChatEdit_InsertLink, link) end
+
+		local link = ns.ItemChatLink(itemID)
+		if not link then
+			ns.Print("item not cached yet - hover it once and try again")
+			return
+		end
+
+		-- insert into the open edit box, or open chat with the link in it
+		local inserted = false
+		if ChatEdit_InsertLink then
+			local ok, res = pcall(ChatEdit_InsertLink, link)
+			inserted = ok and res
+		end
+		if not inserted and ChatFrame_OpenChat then
+			pcall(ChatFrame_OpenChat, link)
+		end
+
 	elseif IsControlKeyDown() then
 		ns.MarkAction("ctrl-click (dressing room)")
+		local link = ns.ItemChatLink(itemID) or ns.ItemLink(itemID)
 		if DressUpItemLink then pcall(DressUpItemLink, link) end
 	end
 end
@@ -376,6 +486,10 @@ local function RenderNpcs()
 		if entry.npc then
 			label = "|cff40d040" .. label .. "|r"
 		end
+		local wing = ns.RefWing and ns.RefWing(state.instance, entry.name)
+		if wing then
+			label = label .. "  |cff707070" .. wing .. "|r"
+		end
 		row.label:SetText(label)
 		row.right:SetText(refCount > 0 and tostring(refCount) or "")
 
@@ -412,66 +526,74 @@ end
 
 local function RenderLoot()
 	local column = ui.loot
-	local index = 0
+	local count = 0
 	local minQuality = ns.db.settings.minQuality or 0
+
+	-- One item cell: icon, coloured name with its validation marker, the slot
+	-- line underneath and the drop rate on the right.
+	local function Place(row, subText)
+		count = count + 1
+		local btn = GetItemButton(column, count)
+		btn.itemID = row.itemID
+		btn.icon:SetTexture(row.texture or FALLBACK_ICON)
+
+		local name = ns.QualityText(row.quality, row.name)
+		local marker = ns.StatusMarker and (ns.StatusMarker(row.itemID)) or ""
+		if marker ~= "" then name = marker .. " " .. name end
+		if row.guess then name = name .. " |cffb0602a?|r" end
+		btn.name:SetText(name)
+
+		btn.sub:SetText(subText or row.sub or "")
+
+		if row.count and row.loots and row.loots > 0 then
+			btn.stat:SetText(string.format("|cffffffff%s|r  %d/%d",
+				ns.Percent(row.count, row.loots), row.count, row.loots))
+		elseif row.count then
+			btn.stat:SetText(string.format("|cffffffffx%d|r", row.count))
+		else
+			btn.stat:SetText("")
+		end
+	end
 
 	if state.search ~= "" and #state.search >= 2 then
 		column.title:SetText("Search: \"" .. state.search .. "\"")
-		for _, entry in ipairs(BuildSearchList(state.search)) do
-			if (entry.quality or 99) >= minQuality then
-				index = index + 1
-				local row = GetRow(column, index)
-				row.icon:SetTexture(entry.texture)
-				row.label:SetText(ns.QualityText(entry.quality, entry.name) .. "  |cff707070" .. entry.origin .. "|r")
-				row.right:SetText(entry.count and ns.Percent(entry.count, entry.loots) or "")
-				row.tooltipItem = entry.itemID
-				row:SetScript("OnClick", OnItemClick)
+		for _, row in ipairs(BuildSearchList(state.search)) do
+			if (row.quality or 99) >= minQuality then
+				Place(row, "|cff707070" .. (row.origin or "") .. "|r")
 			end
 		end
 	else
 		local entry = ui.bossList and FindEntry(ui.bossList, state.boss)
 		if entry then
-			local suffix = entry.npc and ("  |cff808080(" .. (entry.npc.loots or 0) .. " loots)|r") or ""
+			local suffix = entry.npc and ("  |cff808080" .. (entry.npc.loots or 0) .. " loots|r") or ""
 			column.title:SetText("Loot - " .. entry.name .. suffix)
 		else
 			column.title:SetText("Loot")
 		end
 
-		for _, row0 in ipairs(BuildItemList(entry)) do
-			if (row0.quality or 99) >= minQuality then
-				index = index + 1
-				local row = GetRow(column, index)
-				row.icon:SetTexture(row0.texture)
-
-				local suffix = row0.guess and "  |cffb0602a(guess)|r" or ""
-				if row0.isNew then suffix = suffix .. "  |cff40d040new|r" end
-				row.label:SetText(ns.QualityText(row0.quality, row0.name) .. suffix)
-
-				if row0.count then
-					row.right:SetText(string.format("%d/%d  %s",
-						row0.count, row0.loots, ns.Percent(row0.count, row0.loots)))
-				else
-					row.right:SetText("|cff606060ref|r")
-				end
-
-				row.tooltipItem = row0.itemID
-				row:SetScript("OnClick", OnItemClick)
+		for _, row in ipairs(BuildItemList(entry)) do
+			if (row.quality or 99) >= minQuality then
+				Place(row)
 			end
 		end
 	end
 
-	if index == 0 then
-		index = 1
+	if count == 0 then
+		HideItemsFrom(column, 1)
 		local row = GetRow(column, 1)
 		row.icon:SetTexture(nil)
-		row.label:SetText("|cff808080Nothing to show yet. Run the dungeon and loot the bosses.|r")
+		row.label:SetText("|cff808080Pick a boss on the left, or run the dungeon and loot it.|r")
 		row.right:SetText("")
 		row.tooltipItem = nil
 		row:SetScript("OnClick", nil)
+		HideRowsFrom(column, 2)
+		column.content:SetHeight(18)
+		return
 	end
 
-	HideRowsFrom(column, index + 1)
-	column.content:SetHeight(math.max(1, index * 18))
+	HideRowsFrom(column, 1)
+	HideItemsFrom(column, count + 1)
+	column.content:SetHeight(math.max(1, math.ceil(count / 2) * ITEM_HEIGHT))
 end
 
 function ns.RefreshUI()
@@ -487,19 +609,19 @@ end
 -------------------------------------------------------------------------------
 
 local function CreateUI()
-	local f = CreateFrame("Frame", "AtlasLootForeverFrame", UIParent, "BasicFrameTemplateWithInset")
-	f:SetSize(900, 520)
+	local f = CreateFrame("Frame", "AtlasLootForeverImensoFrame", UIParent, "BasicFrameTemplateWithInset")
+	f:SetSize(1010, 560)
 	f:SetPoint("CENTER")
 	f:SetMovable(true)
 	f:EnableMouse(true)
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", f.StartMoving)
 	f:SetScript("OnDragStop", f.StopMovingOrSizing)
-	tinsert(UISpecialFrames, "AtlasLootForeverFrame")
+	tinsert(UISpecialFrames, "AtlasLootForeverImensoFrame")
 
 	f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	f.title:SetPoint("TOP", f, "TOP", 0, -6)
-	f.title:SetText("AtlasLoot|cff00ff00Forever|r  " .. ns.version)
+	f.title:SetText("AtlasLoot|cff00ff00Forever|r|cffffd100Imenso|r  " .. ns.version)
 
 	-- search box
 	local search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
@@ -543,9 +665,30 @@ local function CreateUI()
 	importBtn:SetText("Import")
 	importBtn:SetScript("OnClick", function() ns.ShowImport() end)
 
+	-- Checks the reference against this client. The dungeon selected on the
+	-- left is the scope; with none selected it checks everything.
+	local validateBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+	validateBtn:SetSize(90, 20)
+	validateBtn:SetPoint("RIGHT", importBtn, "LEFT", -6, 0)
+	validateBtn:SetText("Validate")
+	validateBtn:SetScript("OnClick", function()
+		ns.StartValidation(state.instance)
+	end)
+	validateBtn:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:SetText("Validate the loot table", 1, 1, 1)
+		GameTooltip:AddLine("Asks your own client about every item id listed for the selected dungeon (all of them when none is selected) and marks each one:", nil, nil, nil, true)
+		GameTooltip:AddLine("|cff40d040NEW|r added by Forever      |cff40d040OK|r you looted it", nil, nil, nil, true)
+		GameTooltip:AddLine("|cff9d9d9d?|r Classic data, unconfirmed", nil, nil, nil, true)
+		GameTooltip:AddLine("|cffffd100~|r renamed      |cffff4040!|r not in your client any more", nil, nil, nil, true)
+		GameTooltip:Show()
+	end)
+	validateBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	f.validateBtn = validateBtn
+
 	f.instances = MakeColumn(f, "Dungeons", 16, 230)
-	f.npcs = MakeColumn(f, "Bosses / NPCs", 252, 200)
-	f.loot = MakeColumn(f, "Loot", 458, 424)
+	f.npcs = MakeColumn(f, "Bosses / NPCs", 252, 210)
+	f.loot = MakeColumn(f, "Loot", 468, 526)
 
 	f:SetScript("OnShow", function()
 		f.blueOnly:SetChecked((ns.db.settings.minQuality or 0) >= 3)
@@ -568,9 +711,9 @@ function ns.ToggleUI()
 end
 
 -- Keybinding target (see Bindings.xml)
-function AtlasLootForever_Toggle()
+function AtlasLootForeverImenso_Toggle()
 	ns.ToggleUI()
 end
 
-BINDING_HEADER_ATLASLOOTFOREVER = "AtlasLootForever"
+BINDING_HEADER_ATLASLOOTFOREVER = "AtlasLootForeverImenso"
 BINDING_NAME_ATLASLOOTFOREVER_TOGGLE = "Toggle the loot browser"

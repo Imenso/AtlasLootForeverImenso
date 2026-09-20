@@ -1,0 +1,18 @@
+## Interface: 16001
+## Title: AtlasLoot|cff00ff00Forever|r|cffffd100Imenso|r
+## Notes: Dungeon loot browser for WoW: Forever - every dungeon, a live drop collector and a validator that checks the old loot tables against your client.
+## Author: Mauricio
+## Version: 1.0.0
+## SavedVariables: AtlasLootForeverImensoDB
+## X-Category: Loot
+
+Core.lua
+Diagnostics.lua
+Data.lua
+Reference.lua
+Collector.lua
+Validate.lua
+Tooltip.lua
+Minimap.lua
+Serialize.lua
+UI.lua

@@ -1,4 +1,4 @@
--- AtlasLootForever :: Tooltip.lua
+-- AtlasLootForeverImenso :: Tooltip.lua
 -- Adds the source of any item to its tooltip: dungeon, boss and, once you have
 -- seen it drop, the drop estimate from your own runs.
 --
@@ -82,7 +82,20 @@ local function AddLines(tooltip, itemID)
 	if not sources or #sources == 0 then return end
 
 	tooltip:AddLine(" ")
-	tooltip:AddLine("AtlasLoot|cff00ff00Forever|r", 0.4, 0.8, 1)
+	tooltip:AddLine("AtlasLoot|cff00ff00Forever|r|cffffd100Imenso|r", 0.4, 0.8, 1)
+
+	-- what the validator knows about this id on THIS client
+	if ns.ItemStatus then
+		local status, clientName = ns.ItemStatus(itemID)
+		local info = ns.STATUS_TAG and ns.STATUS_TAG[status]
+		if info and status ~= "unchecked" then
+			tooltip:AddLine("|c" .. info.color .. info.text .. "|r")
+			if status == "renamed" and clientName then
+				local ref = ns.RefAllItems and ns.RefAllItems[itemID]
+				tooltip:AddLine("the reference calls it: " .. (ref and ref.name or "?"), 1, 1, 1)
+			end
+		end
+	end
 
 	local shown = 0
 	for _, entry in ipairs(sources) do
@@ -93,8 +106,11 @@ local function AddLines(tooltip, itemID)
 
 		local stat = DropStat(itemID, entry.boss)
 		local right = stat or ""
+		local wing = ns.RefWing and ns.RefWing(entry.dungeon, entry.boss)
+		local where = wing and string.format("%s (%s) › %s", entry.dungeon, wing, entry.boss)
+			or string.format("%s › %s", entry.dungeon, entry.boss)
 		tooltip:AddDoubleLine(
-			string.format("%s › %s", entry.dungeon, entry.boss), right,
+			where, right,
 			0.9, 0.9, 0.9,
 			0.6, 0.9, 0.6
 		)

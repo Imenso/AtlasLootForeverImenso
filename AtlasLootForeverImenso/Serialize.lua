@@ -1,4 +1,4 @@
--- AtlasLootForever :: Serialize.lua
+-- AtlasLootForeverImenso :: Serialize.lua
 -- Export and import of the collected database.
 --
 -- Line format (one line per item, easy to paste into Discord or a spreadsheet):
@@ -15,7 +15,7 @@ end
 
 function ns.ExportLines()
 	local out = {}
-	tinsert(out, "# AtlasLootForever " .. ns.version .. " - exported " .. date("%Y-%m-%d %H:%M"))
+	tinsert(out, "# AtlasLootForeverImenso " .. ns.version .. " - exported " .. date("%Y-%m-%d %H:%M"))
 
 	for npcID, npc in pairs(ns.db.npcs) do
 		local instance = npc.instanceKey and ns.db.instances[npc.instanceKey]
@@ -45,7 +45,7 @@ function ns.ExportLines()
 end
 
 function ns.ExportLua()
-	local out = { "AtlasLootForeverData = {" }
+	local out = { "AtlasLootForeverImensoData = {" }
 
 	for npcID, npc in pairs(ns.db.npcs) do
 		local instance = npc.instanceKey and ns.db.instances[npc.instanceKey]
@@ -129,7 +129,7 @@ end
 local textFrame
 
 local function CreateTextFrame()
-	local f = CreateFrame("Frame", "AtlasLootForeverTextFrame", UIParent, "BasicFrameTemplateWithInset")
+	local f = CreateFrame("Frame", "AtlasLootForeverImensoTextFrame", UIParent, "BasicFrameTemplateWithInset")
 	f:SetSize(620, 440)
 	f:SetPoint("CENTER")
 	f:SetMovable(true)
@@ -138,7 +138,7 @@ local function CreateTextFrame()
 	f:SetScript("OnDragStart", f.StartMoving)
 	f:SetScript("OnDragStop", f.StopMovingOrSizing)
 	f:SetFrameStrata("DIALOG")
-	tinsert(UISpecialFrames, "AtlasLootForeverTextFrame")
+	tinsert(UISpecialFrames, "AtlasLootForeverImensoTextFrame")
 
 	f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	f.title:SetPoint("TOP", f, "TOP", 0, -6)
@@ -148,7 +148,7 @@ local function CreateTextFrame()
 	f.hint:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, -30)
 	f.hint:SetJustifyH("LEFT")
 
-	local scroll = CreateFrame("ScrollFrame", "AtlasLootForeverTextScroll", f, "UIPanelScrollFrameTemplate")
+	local scroll = CreateFrame("ScrollFrame", "AtlasLootForeverImensoTextScroll", f, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -50)
 	scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 44)
 
@@ -173,7 +173,7 @@ function ns.ShowExport(format)
 	textFrame = textFrame or CreateTextFrame()
 
 	local text = (format == "lua") and ns.ExportLua() or ns.ExportLines()
-	textFrame.title:SetText("AtlasLootForever - export (" .. (format or "lines") .. ")")
+	textFrame.title:SetText("AtlasLootForeverImenso - export (" .. (format or "lines") .. ")")
 	textFrame.hint:SetText("Click the text, Ctrl+A to select all, Ctrl+C to copy.")
 	textFrame.edit:SetText(text)
 	textFrame.edit:HighlightText()
@@ -188,7 +188,7 @@ function ns.ShowImport()
 	if not ns.db then ns.InitDB() end
 	textFrame = textFrame or CreateTextFrame()
 
-	textFrame.title:SetText("AtlasLootForever - import")
+	textFrame.title:SetText("AtlasLootForeverImenso - import")
 	textFrame.hint:SetText("Paste someone else's ALF1 lines here and click Import. The data is merged into yours.")
 	textFrame.edit:SetText("")
 	textFrame.edit:SetFocus()

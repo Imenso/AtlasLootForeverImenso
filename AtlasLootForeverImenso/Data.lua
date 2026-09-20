@@ -1,4 +1,4 @@
--- AtlasLootForever :: Data.lua
+-- AtlasLootForeverImenso :: Data.lua
 -- Known instances, grouped into sections.
 --
 -- Boss and loot lists are empty on purpose: as of 2026-09-19 Blizzard had not

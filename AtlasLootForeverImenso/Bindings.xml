@@ -1,5 +1,5 @@
 <Bindings xmlns="http://www.blizzard.com/wow/ui/">
 	<Binding name="ATLASLOOTFOREVER_TOGGLE" header="ATLASLOOTFOREVER">
-		AtlasLootForever_Toggle()
+		AtlasLootForeverImenso_Toggle()
 	</Binding>
 </Bindings>

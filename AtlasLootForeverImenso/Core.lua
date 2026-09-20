@@ -1,4 +1,4 @@
--- AtlasLootForever :: Core.lua
+-- AtlasLootForeverImenso :: Core.lua
 -- Namespace, database, helpers and item cache.
 
 local ADDON, ns = ...
@@ -25,7 +25,7 @@ ns.QUALITY_COLOR = {
 function ns.Print(msg)
 	local frame = DEFAULT_CHAT_FRAME
 	if frame then
-		frame:AddMessage("|cff66ccffAtlasLoot|r|cff00ff00Forever|r: " .. tostring(msg))
+		frame:AddMessage("|cff66ccffAtlasLoot|r|cff00ff00Forever|r|cffffd100Imenso|r: " .. tostring(msg))
 	end
 end
 
@@ -33,7 +33,7 @@ end
 -- Database
 -------------------------------------------------------------------------------
 
-local DB_VERSION = 1
+local DB_VERSION = 2
 
 local function DefaultDB()
 	return {
@@ -42,6 +42,8 @@ local function DefaultDB()
 		instances = {},
 		-- [npcID] = { name, instanceKey, loots = n, items = { [itemID] = { q, n, guess } } }
 		npcs = {},
+		-- [itemID] = { s = status, n = client name when renamed, q, t } (Validate.lua)
+		validation = {},
 		settings = {
 			minQuality = 2, -- hide grey and white by default
 			onlyInstances = true, -- only record inside dungeons and raids
@@ -53,11 +55,30 @@ local function DefaultDB()
 	}
 end
 
+-- The addon used to be called AtlasLootForever. If its database is still in
+-- memory (the old folder is installed and loads first) and this one is empty,
+-- take everything over, once, so nothing collected is lost by the rename.
+local function AdoptOldDatabase()
+	local old = rawget(_G, "AtlasLootForeverDB")
+	if type(old) ~= "table" then return false end
+	if type(old.npcs) ~= "table" then return false end
+
+	local copy = {}
+	for key, value in pairs(old) do copy[key] = value end
+	copy.adoptedFrom = "AtlasLootForever"
+	AtlasLootForeverImensoDB = copy
+	return true
+end
+
 function ns.InitDB()
-	if type(AtlasLootForeverDB) ~= "table" then
-		AtlasLootForeverDB = DefaultDB()
+	local adopted = false
+	if type(AtlasLootForeverImensoDB) ~= "table" then
+		adopted = AdoptOldDatabase()
+		if not adopted then
+			AtlasLootForeverImensoDB = DefaultDB()
+		end
 	end
-	local db = AtlasLootForeverDB
+	local db = AtlasLootForeverImensoDB
 	local defaults = DefaultDB()
 	for key, value in pairs(defaults) do
 		if db[key] == nil then
@@ -71,6 +92,13 @@ function ns.InitDB()
 	end
 	db.version = DB_VERSION
 	ns.db = db
+
+	if adopted then
+		local npcs = 0
+		for _ in pairs(db.npcs) do npcs = npcs + 1 end
+		ns.Print(string.format("picked up the old AtlasLootForever database: %d NPC(s) with loot.", npcs))
+	end
+
 	return db
 end
 
@@ -143,8 +171,27 @@ function ns.ItemIDFromLink(link)
 	return tonumber(id)
 end
 
+-- Hyperlink string for tooltips (SetHyperlink accepts this short form)
 function ns.ItemLink(itemID)
 	return "item:" .. tostring(itemID)
+end
+
+-- Real, clickable chat link: |cff...|Hitem:ID:...|h[Name]|h|r
+-- GetItemInfo only returns it once the client has the item cached, so there is
+-- a fallback that builds a valid link from the cached name and quality.
+function ns.ItemChatLink(itemID)
+	local ok, _, link = pcall(GetItemInfoFn, itemID)
+	if ok and type(link) == "string" and link ~= "" then
+		return link
+	end
+
+	local data = ns.GetItemData(itemID)
+	if data and data.name then
+		local color = ns.QUALITY_COLOR[data.quality or 1] or ns.QUALITY_COLOR[1]
+		return string.format("|c%s|Hitem:%d|h[%s]|h|r", color, itemID, data.name)
+	end
+
+	return nil
 end
 
 -- Item name cache. GetItemInfo can return nil on first access; the item then
@@ -194,6 +241,9 @@ function ns.OnItemInfoReceived(itemID)
 			ns.RefreshUI()
 		end
 	end
+	if ns.ValidateOnItemInfo then
+		ns.ValidateOnItemInfo(itemID)
+	end
 end
 
 -- Ask the server for items that still have no name, so the panel is not empty.
@@ -201,6 +251,16 @@ function ns.WarmItemCache()
 	for itemID in pairs(pending) do
 		ns.GetItemData(itemID)
 	end
+end
+
+-- "Head, Plate" style description line, like AtlasLoot's item subtext
+function ns.ItemSlotText(data)
+	if not data then return "" end
+	local parts = {}
+	local slot = data.equipSlot
+	if slot and slot ~= "" and _G[slot] then parts[#parts + 1] = _G[slot] end
+	if data.itemSubType and data.itemSubType ~= "" then parts[#parts + 1] = data.itemSubType end
+	return table.concat(parts, ", ")
 end
 
 function ns.QualityText(quality, text)
@@ -219,6 +279,9 @@ end
 -- Replaced by Diagnostics.lua and Collector.lua; these stay so the addon
 -- does not break if one of those files fails to load.
 function ns.MarkAction() end
+function ns.StartValidation() ns.Print("validation module did not load.") end
+function ns.ValidationReport() ns.Print("validation module did not load.") end
+function ns.InvalidateLooted() end
 function ns.DumpBlocked() ns.Print("diagnostics module did not load.") end
 function ns.DumpEvents() ns.Print("collector did not load.") end
 function ns.TryCombatLog() ns.Print("collector did not load.") end
@@ -227,32 +290,103 @@ function ns.TryCombatLog() ns.Print("collector did not load.") end
 -- Slash commands
 -------------------------------------------------------------------------------
 
-SLASH_ATLASLOOTFOREVER1 = "/alf"
-SLASH_ATLASLOOTFOREVER2 = "/atlaslootforever"
+SLASH_ATLASLOOTFOREVERIMENSO1 = "/alfi"
+SLASH_ATLASLOOTFOREVERIMENSO2 = "/alf"
+SLASH_ATLASLOOTFOREVERIMENSO3 = "/atlaslootforeverimenso"
 
-SlashCmdList["ATLASLOOTFOREVER"] = function(msg)
-	msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+local function Help()
+	ns.Print("|cffffd100browser|r")
+	ns.Print("   /alfi - open the browser")
+	ns.Print("   /alfi minimap - show or hide the minimap button")
+	ns.Print("|cffffd100validating the loot tables|r")
+	ns.Print("   /alfi validate - check the dungeon you are standing in")
+	ns.Print("   /alfi validate all - check every dungeon (takes a minute)")
+	ns.Print("   /alfi validate <name> - e.g. /alfi validate strat")
+	ns.Print("   /alfi report - summary of what was already validated")
+	ns.Print("   /alfi report <name> - list the renamed and missing ids")
+	ns.Print("|cffffd100your own data|r")
+	ns.Print("   /alfi stats - how much has been collected")
+	ns.Print("   /alfi export - export as lines (to paste into Discord)")
+	ns.Print("   /alfi export lua - export as a Lua table")
+	ns.Print("   /alfi import - open the import window")
+	ns.Print("   /alfi reset - erase everything collected")
+	ns.Print("|cffffd100client diagnostics|r")
+	ns.Print("   /alfi blocked - functions client 16001 refused")
+	ns.Print("   /alfi events - which events the client accepted")
+	ns.Print("   /alfi combatlog - try the combat log (refused on this client)")
+end
 
-	if msg == "export" then
-		ns.ShowExport("linha")
-	elseif msg == "export lua" then
-		ns.ShowExport("lua")
-	elseif msg == "import" then
+local function Validate(argument)
+	if argument == "all" or argument == "tudo" then
+		ns.StartValidation(nil)
+		return
+	end
+
+	if argument == "" or argument == "here" or argument == "aqui" then
+		local here = ns.CurrentDungeon and ns.CurrentDungeon()
+		if not here then
+			ns.Print("you are not in a dungeon - use |cffffd100/alfi validate all|r or name one.")
+			return
+		end
+		ns.StartValidation(here)
+		return
+	end
+
+	local name, matches = ns.ResolveDungeon and ns.ResolveDungeon(argument)
+	if name then
+		ns.StartValidation(name)
+	elseif matches and #matches > 1 then
+		ns.Print("which one? " .. table.concat(matches, ", "))
+	else
+		ns.Print(string.format("no dungeon matching \"%s\".", argument))
+	end
+end
+
+local function Report(argument)
+	if argument == "" then
+		ns.ValidationReport(nil)
+		return
+	end
+
+	local name, matches = ns.ResolveDungeon and ns.ResolveDungeon(argument)
+	if name then
+		ns.ValidationReport(name)
+	elseif matches and #matches > 1 then
+		ns.Print("which one? " .. table.concat(matches, ", "))
+	else
+		ns.Print(string.format("no dungeon matching \"%s\".", argument))
+	end
+end
+
+SlashCmdList["ATLASLOOTFOREVERIMENSO"] = function(msg)
+	msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	local command, argument = msg:match("^(%S*)%s*(.-)$")
+	command = (command or ""):lower()
+	argument = argument or ""
+
+	if command == "export" then
+		ns.ShowExport(argument:lower() == "lua" and "lua" or "linha")
+	elseif command == "import" then
 		ns.ShowImport()
-	elseif msg == "reset" then
-		AtlasLootForeverDB = nil
+	elseif command == "validate" or command == "validar" then
+		Validate(argument:lower())
+	elseif command == "report" or command == "relatorio" then
+		Report(argument)
+	elseif command == "reset" then
+		AtlasLootForeverImensoDB = nil
 		ns.InitDB()
+		ns.InvalidateLooted()
 		ns.Print("database wiped.")
 		if ns.RefreshUI then ns.RefreshUI() end
-	elseif msg == "blocked" or msg == "bloqueios" then
+	elseif command == "blocked" or command == "bloqueios" then
 		ns.DumpBlocked()
-	elseif msg == "events" or msg == "eventos" then
+	elseif command == "events" or command == "eventos" then
 		ns.DumpEvents()
-	elseif msg == "combatlog" then
+	elseif command == "combatlog" then
 		ns.TryCombatLog()
-	elseif msg == "minimap" then
+	elseif command == "minimap" then
 		ns.ToggleMinimapButton()
-	elseif msg == "stats" then
+	elseif command == "stats" then
 		local npcs, items = 0, 0
 		for _, npc in pairs(ns.db.npcs) do
 			npcs = npcs + 1
@@ -260,22 +394,15 @@ SlashCmdList["ATLASLOOTFOREVER"] = function(msg)
 		end
 
 		local seen, total, extra = ns.GlobalCoverage()
-		ns.Print(string.format("reference coverage: %d/%d (%s)", seen, total, ns.Percent(seen, total)))
+		ns.Print(string.format("reference: %d items, %s (%s)",
+			ns.RefTotal or total, ns.RefDate or "?", ns.RefSource or "?"))
+		ns.Print(string.format("coverage by your own drops: %d/%d (%s)", seen, total, ns.Percent(seen, total)))
 		if extra > 0 then
 			ns.Print(string.format("|cff40d040%d|r item(s) the reference does not list", extra))
 		end
 		ns.Print(string.format("%d NPCs with loot recorded, %d items in total.", npcs, items))
-	elseif msg == "help" or msg == "ajuda" then
-		ns.Print("/alf - open the browser")
-		ns.Print("/alf export - export as lines (to paste into Discord)")
-		ns.Print("/alf export lua - export as a Lua table")
-		ns.Print("/alf import - open the import window")
-		ns.Print("/alf blocked - show the functions the client blocked")
-		ns.Print("/alf events - show which events the client accepted")
-		ns.Print("/alf combatlog - try the combat log (refused on this client)")
-		ns.Print("/alf minimap - show or hide the minimap button")
-		ns.Print("/alf stats - how much has been collected")
-		ns.Print("/alf reset - erase everything collected")
+	elseif command == "help" or command == "ajuda" then
+		Help()
 	else
 		ns.ToggleUI()
 	end
