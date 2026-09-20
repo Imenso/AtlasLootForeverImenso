@@ -1,0 +1,17 @@
+## Interface: 16001
+## Title: AtlasLoot|cff00ff00Forever|r
+## Notes: Dungeon loot browser for WoW: Forever, with a live drop collector.
+## Author: Mauricio
+## Version: 0.5.3
+## SavedVariables: AtlasLootForeverDB
+## X-Category: Loot
+
+Core.lua
+Diagnostics.lua
+Data.lua
+Reference.lua
+Collector.lua
+Tooltip.lua
+Minimap.lua
+Serialize.lua
+UI.lua
