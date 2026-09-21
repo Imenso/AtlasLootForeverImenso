@@ -5,6 +5,9 @@ local ADDON, ns = ...
 
 local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
+-- Two points of extra font need room to sit in.
+local ROW_HEIGHT = 21
+
 local ui
 local state = { instance = nil, boss = nil, search = "" }
 
@@ -20,7 +23,7 @@ local function MakeColumn(parent, title, x, width)
 	column:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x, 16)
 	column:SetWidth(width)
 
-	column.title = column:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	column.title = ns.FontString(column, "OVERLAY", "GameFontNormalSmall")
 	column.title:SetPoint("TOPLEFT", column, "TOPLEFT", 4, 0)
 	column.title:SetText(title)
 
@@ -42,7 +45,7 @@ local function GetRow(column, index, height)
 	local row = column.rows[index]
 	if not row then
 		row = CreateFrame("Button", nil, column.content)
-		row:SetHeight(height or 18)
+		row:SetHeight(height or ROW_HEIGHT)
 
 		row.highlight = row:CreateTexture(nil, "BACKGROUND")
 		row.highlight:SetAllPoints()
@@ -74,11 +77,11 @@ local function GetRow(column, index, height)
 		row.icon:SetSize(14, 14)
 		row.icon:SetPoint("LEFT", row, "LEFT", 2, 0)
 
-		row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		row.label = ns.FontString(row, "OVERLAY", "GameFontHighlightSmall")
 		row.label:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
 		row.label:SetJustifyH("LEFT")
 
-		row.right = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		row.right = ns.FontString(row, "OVERLAY", "GameFontDisableSmall")
 		row.right:SetPoint("RIGHT", row, "RIGHT", -4, 0)
 		row.right:SetJustifyH("RIGHT")
 
@@ -87,7 +90,7 @@ local function GetRow(column, index, height)
 		column.rows[index] = row
 	end
 
-	local offset = -((index - 1) * (height or 18))
+	local offset = -((index - 1) * (height or ROW_HEIGHT))
 	row:ClearAllPoints()
 	row:SetPoint("TOPLEFT", column.content, "TOPLEFT", 0, offset)
 	row:SetPoint("TOPRIGHT", column.content, "TOPRIGHT", 0, offset)
@@ -97,7 +100,7 @@ local function GetRow(column, index, height)
 	return row
 end
 
-local ITEM_HEIGHT = 34
+local ITEM_HEIGHT = 39
 
 local function ItemTooltip(self)
 	self.highlight:Show()
@@ -140,17 +143,17 @@ local function GetItemButton(column, index)
 		btn.icon:SetSize(26, 26)
 		btn.icon:SetPoint("LEFT", btn, "LEFT", 2, 0)
 
-		btn.stat = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		btn.stat = ns.FontString(btn, "OVERLAY", "GameFontDisableSmall")
 		btn.stat:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -2, -3)
 		btn.stat:SetJustifyH("RIGHT")
 
-		btn.name = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		btn.name = ns.FontString(btn, "OVERLAY", "GameFontNormalSmall")
 		btn.name:SetPoint("TOPLEFT", btn.icon, "TOPRIGHT", 5, -2)
 		btn.name:SetPoint("RIGHT", btn.stat, "LEFT", -4, 0)
 		btn.name:SetJustifyH("LEFT")
 		btn.name:SetWordWrap(false)
 
-		btn.sub = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		btn.sub = ns.FontString(btn, "OVERLAY", "GameFontDisableSmall")
 		btn.sub:SetPoint("TOPLEFT", btn.name, "BOTTOMLEFT", 0, -2)
 		btn.sub:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
 		btn.sub:SetJustifyH("LEFT")
@@ -467,7 +470,7 @@ local function RenderInstances()
 	end
 
 	HideRowsFrom(column, index + 1)
-	column.content:SetHeight(math.max(1, index * 18))
+	column.content:SetHeight(math.max(1, index * ROW_HEIGHT))
 end
 
 local function RenderNpcs()
@@ -521,7 +524,7 @@ local function RenderNpcs()
 	end
 
 	HideRowsFrom(column, index + 1)
-	column.content:SetHeight(math.max(1, index * 18))
+	column.content:SetHeight(math.max(1, index * ROW_HEIGHT))
 end
 
 local function RenderLoot()
@@ -587,7 +590,7 @@ local function RenderLoot()
 		row.tooltipItem = nil
 		row:SetScript("OnClick", nil)
 		HideRowsFrom(column, 2)
-		column.content:SetHeight(18)
+		column.content:SetHeight(ROW_HEIGHT)
 		return
 	end
 
@@ -610,7 +613,7 @@ end
 
 local function CreateUI()
 	local f = CreateFrame("Frame", "AtlasLootForeverImensoFrame", UIParent, "BasicFrameTemplateWithInset")
-	f:SetSize(1010, 560)
+	f:SetSize(1080, 600)
 	f:SetPoint("CENTER")
 	f:SetMovable(true)
 	f:EnableMouse(true)
@@ -619,7 +622,7 @@ local function CreateUI()
 	f:SetScript("OnDragStop", f.StopMovingOrSizing)
 	tinsert(UISpecialFrames, "AtlasLootForeverImensoFrame")
 
-	f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	f.title = ns.FontString(f, "OVERLAY", "GameFontHighlight")
 	f.title:SetPoint("TOP", f, "TOP", 0, -6)
 	f.title:SetText("AtlasLoot|cff00ff00Forever|r|cffffd100Imenso|r  " .. ns.version)
 
@@ -635,7 +638,7 @@ local function CreateUI()
 	search:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
 	f.search = search
 
-	local searchLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	local searchLabel = ns.FontString(f, "OVERLAY", "GameFontDisableSmall")
 	searchLabel:SetPoint("LEFT", search, "RIGHT", 6, 0)
 	searchLabel:SetText("search every item in the database")
 
@@ -643,7 +646,7 @@ local function CreateUI()
 	local blueOnly = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
 	blueOnly:SetSize(22, 22)
 	blueOnly:SetPoint("TOPLEFT", f, "TOPLEFT", 420, -30)
-	blueOnly.text = blueOnly:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	blueOnly.text = ns.FontString(blueOnly, "OVERLAY", "GameFontNormalSmall")
 	blueOnly.text:SetPoint("LEFT", blueOnly, "RIGHT", 2, 0)
 	blueOnly.text:SetText("blue or better only")
 	blueOnly:SetScript("OnClick", function(self)
@@ -686,9 +689,9 @@ local function CreateUI()
 	validateBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	f.validateBtn = validateBtn
 
-	f.instances = MakeColumn(f, "Dungeons", 16, 230)
-	f.npcs = MakeColumn(f, "Bosses / NPCs", 252, 210)
-	f.loot = MakeColumn(f, "Loot", 468, 526)
+	f.instances = MakeColumn(f, "Dungeons", 16, 248)
+	f.npcs = MakeColumn(f, "Bosses / NPCs", 270, 226)
+	f.loot = MakeColumn(f, "Loot", 502, 562)
 
 	f:SetScript("OnShow", function()
 		f.blueOnly:SetChecked((ns.db.settings.minQuality or 0) >= 3)

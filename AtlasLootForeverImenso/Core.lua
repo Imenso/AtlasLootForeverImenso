@@ -263,6 +263,54 @@ function ns.ItemSlotText(data)
 	return table.concat(parts, ", ")
 end
 
+-------------------------------------------------------------------------------
+-- Fonts
+--
+-- Blizzard's font objects are shared by the whole interface, so changing one
+-- changes every window in the game. Instead each one we use gets a private
+-- copy, two points larger, and only this addon's text is pointed at the copy.
+-------------------------------------------------------------------------------
+
+ns.FONT_BUMP = 2
+
+local fontCache = {}
+
+function ns.Font(baseName)
+	local cached = fontCache[baseName]
+	if cached ~= nil then return cached end
+
+	local base = _G[baseName]
+	local made = false
+
+	if base and base.GetFont and CreateFont then
+		local ok, file, size, flags = pcall(base.GetFont, base)
+		if ok and file and size then
+			local copy = CreateFont("AtlasLootForeverImenso" .. baseName)
+			if copy then
+				pcall(copy.SetFont, copy, file, size + ns.FONT_BUMP, flags)
+				local okColor, r, g, b, a = pcall(base.GetTextColor, base)
+				if okColor and r then pcall(copy.SetTextColor, copy, r, g, b, a) end
+				local okShadow, sr, sg, sb, sa = pcall(base.GetShadowColor, base)
+				if okShadow and sr then pcall(copy.SetShadowColor, copy, sr, sg, sb, sa) end
+				local okOffset, ox, oy = pcall(base.GetShadowOffset, base)
+				if okOffset and ox then pcall(copy.SetShadowOffset, copy, ox, oy) end
+				made = copy
+			end
+		end
+	end
+
+	fontCache[baseName] = made
+	return made
+end
+
+-- Creates a font string already using the enlarged copy.
+function ns.FontString(parent, layer, baseName)
+	local fontString = parent:CreateFontString(nil, layer or "OVERLAY", baseName)
+	local bumped = ns.Font(baseName)
+	if bumped then pcall(fontString.SetFontObject, fontString, bumped) end
+	return fontString
+end
+
 function ns.QualityText(quality, text)
 	local color = ns.QUALITY_COLOR[quality or 1] or ns.QUALITY_COLOR[1]
 	return "|c" .. color .. tostring(text) .. "|r"
